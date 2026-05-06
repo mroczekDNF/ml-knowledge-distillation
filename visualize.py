@@ -122,43 +122,70 @@ def _reduce_embeddings(embs: np.ndarray, method: str = "pca") -> np.ndarray:
 
 def plot_embedding_comparison(embs_dict: dict, labels: np.ndarray,
                              title: str, filename: str,
-                             method: str = "pca"):
+                             method: str = "pca",
+                             max_classes: int = 25,
+                             classes_per_plot: int = 3):
     """
-    embs_dict: {"Name": np.ndarray (N, D), ...}
-    Draws side-by-side plots colored by class.
+    Divide las clases en bloques consecutivos de tamaño fijo (por defecto 3)
+    y genera un gráfico por bloque hasta max_classes.
+
+    Ejemplo:
+      0-2, 3-5, 6-8, ..., hasta cubrir 25 clases.
     """
-    n = len(embs_dict)
-    fig, axes = plt.subplots(1, n, figsize=(6 * n, 5))
-    if n == 1:
-        axes = [axes]
 
-    fig.suptitle(title, fontsize=13)
+    base_filename, ext = os.path.splitext(filename)
 
-    mask = labels < config.VIZ_CLASSES
+    # Generar rangos: (0,3), (3,6), (6,9), ...
+    for start in range(0, max_classes, classes_per_plot):
+        end = min(start + classes_per_plot, max_classes)
 
-    for ax, (name, embs) in zip(axes, embs_dict.items()):
-        reduced = _reduce_embeddings(embs[mask], method=method)
-        lbs     = labels[mask]
+        # Filtrar etiquetas dentro del rango
+        mask = (labels >= start) & (labels < end)
 
-        for cls in range(config.VIZ_CLASSES):
-            idx = lbs == cls
-            ax.scatter(reduced[idx, 0], reduced[idx, 1],
-                       s=8, alpha=0.6,
-                       color=COLORS[cls % 10],
-                       label=str(cls))
+        if not np.any(mask):
+            continue  # evitar plots vacíos
 
-        ax.set_title(name)
-        ax.set_xticks([])
-        ax.set_yticks([])
-        ax.legend(markerscale=2, fontsize=7,
-                  loc="best", title="Class", ncol=2)
+        n = len(embs_dict)
+        fig, axes = plt.subplots(1, n, figsize=(6 * n, 5))
+        if n == 1:
+            axes = [axes]
 
-    plt.tight_layout()
-    path = os.path.join(config.OUTPUT_DIR, filename)
-    plt.savefig(path, dpi=120)
-    plt.close()
-    print(f"[viz] Embeddings saved: {path}")
+        fig.suptitle(f"{title} – Classes {start} to {end - 1}", fontsize=13)
 
+        for ax, (name, embs) in zip(axes, embs_dict.items()):
+            reduced = _reduce_embeddings(embs[mask], method=method)
+            lbs     = labels[mask]
+
+            for cls in range(start, end):
+                idx = lbs == cls
+                if not np.any(idx):
+                    continue
+
+                ax.scatter(
+                    reduced[idx, 0],
+                    reduced[idx, 1],
+                    s=8,
+                    alpha=0.6,
+                    color=COLORS[cls % 10],
+                    label=str(cls)
+                )
+
+            ax.set_title(name)
+            ax.set_xticks([])
+            ax.set_yticks([])
+            ax.legend(markerscale=2, fontsize=7,
+                      loc="best", title="Class", ncol=2)
+
+        plt.tight_layout()
+
+        out_path = os.path.join(
+            config.OUTPUT_DIR,
+            f"{base_filename}_{start}_{end-1}{ext}"
+        )
+        plt.savefig(out_path, dpi=120)
+        plt.close()
+
+        print(f"[viz] Embeddings ({start}-{end-1}) saved: {out_path}")
 
 # ─── Embedding plots (multi views with fewer classes) ─────────────────────────
 
